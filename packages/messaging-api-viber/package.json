@@ -19,7 +19,8 @@
   ],
   "dependencies": {
     "axios": "^0.18.0",
-    "axios-error": "^0.7.7"
+    "axios-error": "^0.7.7",
+    "debug": "^4.0.1"
   },
   "devDependencies": {
     "axios-mock-adapter": "^1.15.0"

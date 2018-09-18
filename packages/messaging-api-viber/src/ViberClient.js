@@ -3,6 +3,7 @@
 
 import AxiosError from 'axios-error';
 import axios from 'axios';
+import debug from 'debug';
 
 import type {
   ViberContact,
@@ -27,7 +28,16 @@ type ClientConfig = {
   accessToken: string,
   sender: ViberSender,
   origin?: string,
+  onRequest?: Function,
 };
+
+const debugRequest = debug('messaging-api-viber');
+
+function onRequest({ method, url, body }) {
+  debugRequest(`${method} ${url}`);
+  debugRequest('Outgoing request body:');
+  debugRequest(JSON.stringify(body, null, 2));
+}
 
 /**
  * https://developers.viber.com/docs/api/rest-bot-api/#viber-rest-api
@@ -44,6 +54,8 @@ export default class ViberClient {
 
   _sender: ViberSender;
 
+  _onRequest: Function;
+
   _axios: Axios;
 
   constructor(accessTokenOrConfig: string | ClientConfig, sender: ViberSender) {
@@ -53,11 +65,14 @@ export default class ViberClient {
 
       this._token = config.accessToken;
       this._sender = config.sender;
+      this._onRequest = config.onRequest;
       origin = config.origin;
     } else {
       this._token = accessTokenOrConfig;
       this._sender = sender;
     }
+
+    this._onRequest = this._onRequest || onRequest;
 
     this._axios = axios.create({
       baseURL: `${origin || 'https://chatapi.viber.com'}/pa/`,
@@ -65,6 +80,16 @@ export default class ViberClient {
         'Content-Type': 'application/json',
         'X-Viber-Auth-Token': this._token,
       },
+    });
+
+    this._axios.interceptors.request.use(config => {
+      this._onRequest({
+        method: config.method,
+        url: config.url,
+        headers: config.headers,
+        body: config.data,
+      });
+      return config;
     });
   }
 

@@ -3,6 +3,7 @@
 
 import AxiosError from 'axios-error';
 import axios from 'axios';
+import debug from 'debug';
 
 import type { ChatAction } from './TelegramTypes';
 
@@ -19,12 +20,22 @@ type ClientConfig = {
   origin?: string,
 };
 
+const debugRequest = debug('messaging-api-telegram');
+
+function onRequest({ method, url, body }) {
+  debugRequest(`${method} ${url}`);
+  debugRequest('Outgoing request body:');
+  debugRequest(JSON.stringify(body, null, 2));
+}
+
 export default class TelegramClient {
   static connect(accessTokenOrConfig: string | ClientConfig): TelegramClient {
     return new TelegramClient(accessTokenOrConfig);
   }
 
   _token: string;
+
+  _onRequest: Function;
 
   _axios: Axios;
 
@@ -34,16 +45,29 @@ export default class TelegramClient {
       const config = accessTokenOrConfig;
 
       this._token = config.accessToken;
+      this._onRequest = config.onRequest;
       origin = config.origin;
     } else {
       this._token = accessTokenOrConfig;
     }
+
+    this._onRequest = this._onRequest || onRequest;
 
     this._axios = axios.create({
       baseURL: `${origin || 'https://api.telegram.org'}/bot${this._token}/`,
       headers: {
         'Content-Type': 'application/json',
       },
+    });
+
+    this._axios.interceptors.request.use(config => {
+      this._onRequest({
+        method: config.method,
+        url: config.url,
+        headers: config.headers,
+        body: config.data,
+      });
+      return config;
     });
   }
 

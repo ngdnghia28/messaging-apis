@@ -4,6 +4,7 @@ import querystring from 'querystring';
 
 import AxiosError from 'axios-error';
 import axios from 'axios';
+import debug from 'debug';
 import omit from 'lodash.omit';
 
 import type {
@@ -69,7 +70,16 @@ type ConversationListOptions = {
 type ClientConfig = {
   accessToken: string,
   origin?: string,
+  onRequest?: Function,
 };
+
+const debugRequest = debug('messaging-api-slack');
+
+function onRequest({ method, url, body }) {
+  debugRequest(`${method} ${url}`);
+  debugRequest('Outgoing request body:');
+  debugRequest(JSON.stringify(body, null, 2));
+}
 
 export default class SlackOAuthClient {
   static connect(accessTokenOrConfig: string | ClientConfig): SlackOAuthClient {
@@ -80,17 +90,22 @@ export default class SlackOAuthClient {
 
   _token: string;
 
+  _onRequest: Function;
+
   constructor(accessTokenOrConfig: string | ClientConfig) {
     let origin;
     if (accessTokenOrConfig && typeof accessTokenOrConfig === 'object') {
       const config = accessTokenOrConfig;
 
       this._token = config.accessToken;
+      this._onRequest = config.onRequest;
       origin = config.origin;
     } else {
       // Bot User OAuth Access Token
       this._token = accessTokenOrConfig;
     }
+
+    this._onRequest = this._onRequest || onRequest;
 
     // Web API
     // https://api.slack.com/web
@@ -99,6 +114,16 @@ export default class SlackOAuthClient {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
+    });
+
+    this._axios.interceptors.request.use(config => {
+      this._onRequest({
+        method: config.method,
+        url: config.url,
+        headers: config.headers,
+        body: config.data,
+      });
+      return config;
     });
   }
 

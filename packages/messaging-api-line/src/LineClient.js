@@ -1,6 +1,7 @@
 /* @flow */
 import AxiosError from 'axios-error';
 import axios from 'axios';
+import debug from 'debug';
 import imageType from 'image-type';
 import invariant from 'invariant';
 
@@ -33,6 +34,13 @@ type Axios = {
   delete: Function,
 };
 
+type ClientConfig = {
+  accessToken: string,
+  channelSecret: string,
+  origin?: string,
+  onRequest?: Function,
+};
+
 function handleError(err) {
   if (err.response && err.response.data) {
     const { message, details } = err.response.data;
@@ -47,11 +55,13 @@ function handleError(err) {
   throw new AxiosError(err.message, err);
 }
 
-type ClientConfig = {
-  accessToken: string,
-  channelSecret: string,
-  origin?: string,
-};
+const debugRequest = debug('messaging-api-line');
+
+function onRequest({ method, url, body }) {
+  debugRequest(`${method} ${url}`);
+  debugRequest('Outgoing request body:');
+  debugRequest(JSON.stringify(body, null, 2));
+}
 
 export default class LineClient {
   static connect(
@@ -65,6 +75,8 @@ export default class LineClient {
 
   _channelSecret: string;
 
+  _onRequest: Function;
+
   _axios: Axios;
 
   constructor(
@@ -77,11 +89,14 @@ export default class LineClient {
 
       this._accessToken = config.accessToken;
       this._channelSecret = config.channelSecret;
+      this._onRequest = config.onRequest;
       origin = config.origin;
     } else {
       this._accessToken = accessTokenOrConfig;
       this._channelSecret = channelSecret;
     }
+
+    this._onRequest = this._onRequest || onRequest;
 
     this._axios = axios.create({
       baseURL: `${origin || 'https://api.line.me'}/`,
@@ -89,6 +104,16 @@ export default class LineClient {
         Authorization: `Bearer ${this._accessToken}`,
         'Content-Type': 'application/json',
       },
+    });
+
+    this._axios.interceptors.request.use(config => {
+      this._onRequest({
+        method: config.method,
+        url: config.url,
+        headers: config.headers,
+        body: config.data,
+      });
+      return config;
     });
   }
 
